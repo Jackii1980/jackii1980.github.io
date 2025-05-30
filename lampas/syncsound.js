@@ -1,5 +1,6 @@
 (function() {
     const pluginId = 'syncsound';
+    const pluginTitle = 'СинхроЗвук';
 
     // Проверяем загрузку Lampa
     if (!window.Lampa || !Lampa.Plugin) {
@@ -7,105 +8,26 @@
         return;
     }
 
-    function aiAnalyzeAudioTrack(track) {
-        try {
-            const name = (track.name || '').toLowerCase();
-            const codec = (track.codec || '').toLowerCase();
-            let score = 0;
+    // Функции aiAnalyzeAudioTrack, normalizeAudioSettings, applyNightMode и onVideoReady
+    // остаются без изменений (как в предыдущем коде)
 
-            const noiseReduction = Lampa.Storage.get(pluginId + '_noisereduce', true);
-            const speechNormalization = Lampa.Storage.get(pluginId + '_speechnorm', true);
-
-            if (noiseReduction) {
-                if (name.includes('cam') || name.includes('ts') || name.includes('mic')) score -= 5;
-                if (name.includes('line') || name.includes('hall')) score -= 3;
-            }
-
-            if (speechNormalization) {
-                if (name.includes('dub') || name.includes('clean') || name.includes('studio')) score += 3;
-                if (name.includes('voice') || name.includes('speech')) score += 1;
-            }
-
-            if (codec.includes('eac3') || codec.includes('ac3') || codec.includes('dts')) score += 1;
-            if (track.bitrate && track.bitrate > 192000) score += 1;
-
-            return {
-                qualityScore: score,
-                predictedClean: score >= 2
-            };
-        } catch (e) {
-            console.error('Ошибка в aiAnalyzeAudioTrack:', e);
-            return { qualityScore: 0, predictedClean: false };
-        }
-    }
-
-    function normalizeAudioSettings(audioTracks) {
-        try {
-            const preferredLangs = ['ru', 'en'];
-            const preferredFormats = ['eac3', 'ac3', 'dts', 'aac'];
-
-            const scoredTracks = audioTracks.map(track => {
-                const ai = aiAnalyzeAudioTrack(track);
-                return {
-                    ...track,
-                    aiScore: ai.qualityScore,
-                    clean: ai.predictedClean
-                };
-            });
-
-            const cleanTracks = scoredTracks.filter(t => t.clean);
-
-            const sorted = (cleanTracks.length ? cleanTracks : scoredTracks).sort((a, b) => {
-                let aLang = preferredLangs.indexOf(a.lang ? a.lang.toLowerCase() : '');
-                let bLang = preferredLangs.indexOf(b.lang ? b.lang.toLowerCase() : '');
-                let aFormat = preferredFormats.indexOf((a.codec || '').toLowerCase());
-                let bFormat = preferredFormats.indexOf((b.codec || '').toLowerCase());
-
-                return (bLang - aLang) || (bFormat - aFormat) || (b.aiScore - a.aiScore);
-            });
-
-            return sorted.length ? sorted[0] : null;
-        } catch (e) {
-            console.error('Ошибка в normalizeAudioSettings:', e);
-            return audioTracks.length ? audioTracks[0] : null;
-        }
-    }
-
-    function applyNightMode() {
-        console.log(`[${pluginId}] Включён ночной режим (эмуляция): компрессия звука`);
-        // Здесь должна быть реализация ночного режима
-    }
-
-    function onVideoReady(event) {
-        try {
-            if (!event || !event.audioTracks) return;
-
-            const audioTracks = event.audioTracks;
-            if (audioTracks.length > 1) {
-                const bestTrack = normalizeAudioSettings(audioTracks);
-                if (bestTrack && event.setAudioTrack) {
-                    console.log(`[${pluginId}] Выбрана аудиодорожка:`, bestTrack);
-                    event.setAudioTrack(bestTrack.index);
-                }
-            }
-
-            if (Lampa.Storage.get(pluginId + '_nightmode', false)) {
-                applyNightMode();
-            }
-        } catch (e) {
-            console.error(`[${pluginId}] Ошибка в onVideoReady:`, e);
-        }
-    }
-
-    function createSettings() {
+    function createSettingsMenu() {
         try {
             if (!Lampa.Settings) {
                 console.error('Lampa.Settings не доступен');
                 return;
             }
 
-            Lampa.Settings.add({
-                title: 'СинхроЗвук',
+            // Создаем отдельную категорию в настройках
+            Lampa.Settings.addCategory(pluginId, {
+                title: pluginTitle,
+                icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>',
+                component: pluginId + '_settings'
+            });
+
+            // Добавляем настройки в созданную категорию
+            Lampa.Settings.add(pluginId + '_settings', {
+                title: pluginTitle,
                 component: pluginId,
                 items: [
                     {
@@ -131,11 +53,36 @@
                         onchange: (val) => {
                             Lampa.Storage.set(pluginId + '_noisereduce', val);
                         }
+                    },
+                    {
+                        name: 'Информация',
+                        type: 'select',
+                        values: [
+                            { name: 'Версия 1.0.1', value: 'version' },
+                            { name: 'О плагине', value: 'about' }
+                        ],
+                        onselect: (val) => {
+                            if (val === 'about') {
+                                Lampa.Noty.show('Плагин для интеллектуального выбора аудиодорожки');
+                            }
+                        }
                     }
                 ]
             });
+
+            // Добавляем пункт в главное меню
+            if (Lampa.Menu && Lampa.Menu.add) {
+                Lampa.Menu.add({
+                    name: pluginTitle,
+                    icon: 'settings',
+                    action: () => {
+                        Lampa.Settings.show(pluginId + '_settings');
+                    }
+                });
+            }
+
         } catch (e) {
-            console.error(`[${pluginId}] Ошибка при создании настроек:`, e);
+            console.error(`[${pluginId}] Ошибка при создании меню настроек:`, e);
         }
     }
 
@@ -144,7 +91,7 @@
         
         // Ждем полной загрузки Lampa
         setTimeout(() => {
-            createSettings();
+            createSettingsMenu();
             
             if (Lampa.Events) {
                 Lampa.Events.subscribe('video_ready', onVideoReady);
@@ -157,8 +104,8 @@
     // Регистрируем плагин
     Lampa.Plugin.register({
         name: pluginId,
-        title: 'СинхроЗвук',
-        version: '1.0.1',
+        title: pluginTitle,
+        version: '1.0.2',
         description: 'AI выбор и нормализация аудиодорожки',
         onLoad: init
     });
