@@ -1,5 +1,3 @@
-setTimeout(() => {
-    if (Lampa.Menu && Lampa.Menu.update) {
-        Lampa.Menu.update();
-    }
-}, 3000);
+// В консоли проверьте:
+console.log('Lampa.Menu.add exists:', !!Lampa.Menu.add);
+console.log('Lampa.Settings.add exists:', !!Lampa.Settings.add);
