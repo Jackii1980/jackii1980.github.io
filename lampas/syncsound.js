@@ -3,32 +3,39 @@
     const pluginTitle = 'СинхроЗвук';
     const settingsTitle = 'Настройки СинхроЗвука';
 
-    // 1. Функция ожидания готовности Lampa
-    function waitForLampa(callback, attempts = 10) {
-        if (window.Lampa && Lampa.Storage && Lampa.Settings && Lampa.Menu) {
-            callback();
-        } else if (attempts > 0) {
-            setTimeout(() => waitForLampa(callback, attempts - 1), 300);
-        } else {
-            console.error('Lampa API не загрузилось после 10 попыток');
+    // 1. Улучшенная проверка API
+    function checkLampaAPI() {
+        const required = {
+            'Storage': ['get', 'set'],
+            'Settings': ['add'],
+            'Events': ['subscribe'],
+            'Menu': ['main', 'add'],
+            'Activity': ['push']
+        };
+        
+        for (const module in required) {
+            if (!Lampa[module]) {
+                console.error(`Lampa.${module} не доступен!`);
+                return false;
+            }
+            for (const method of required[module]) {
+                if (!Lampa[module][method]) {
+                    console.error(`Lampa.${module}.${method} не доступен!`);
+                    return false;
+                }
+            }
         }
+        return true;
     }
 
     // 2. Основные функции плагина (без изменений)
-    // ... (оставляем ваши функции aiAnalyzeAudioTrack, normalizeAudioSettings и др.) ...
+    // ... (aiAnalyzeAudioTrack, normalizeAudioSettings и др.) ...
 
-    // 3. Создание настроек с гарантированным добавлением в меню
+    // 3. Создание меню (совместимая версия)
     function createPluginMenu() {
         try {
-            // Создаем категорию настроек
-            Lampa.Settings.addCategory(pluginId, {
-                title: settingsTitle,
-                icon: 'volume_up',
-                component: pluginId
-            });
-
-            // Добавляем сами настройки
-            Lampa.Settings.add(pluginId, {
+            // Альтернатива addCategory для старых версий
+            const settingsGroup = {
                 title: settingsTitle,
                 items: [
                     {
@@ -44,79 +51,85 @@
                         onchange: (val) => Lampa.Storage.set(pluginId + '_speechnorm', val)
                     }
                 ]
-            });
-
-            // ГАРАНТИРОВАННОЕ добавление в меню (3 разных способа)
-            const menuItem = {
-                name: pluginTitle,
-                icon: 'volume_up',
-                action: () => {
-                    Lampa.Activity.push({
-                        component: 'settings',
-                        url: '',
-                        id: pluginId
-                    });
-                }
             };
 
-            // Способ 1 (современные версии)
-            if (Lampa.Menu.main && Lampa.Menu.main.add) {
-                Lampa.Menu.main.add(menuItem);
-            } 
-            // Способ 2 (старые версии)
-            else if (Lampa.Menu.add) {
-                Lampa.Menu.add(menuItem);
-            }
-            // Способ 3 (экстренный)
-            else {
-                document.addEventListener('lampa-menu-ready', () => {
-                    Lampa.Menu.main.add(menuItem);
+            // Совместимое добавление настроек
+            if (Lampa.Settings.addCategory) {
+                Lampa.Settings.addCategory(pluginId, {
+                    title: settingsTitle,
+                    icon: 'volume_up',
+                    component: pluginId
                 });
+                Lampa.Settings.add(pluginId, settingsGroup);
+            } else {
+                // Для старых версий без addCategory
+                Lampa.Settings.add(pluginId, settingsGroup);
             }
 
-            console.log('Пункт меню успешно добавлен');
+            // Универсальное добавление в меню
+            const menuMethods = [
+                () => Lampa.Menu.main.add({...}),
+                () => Lampa.Menu.add({...}),
+                () => document.dispatchEvent(new CustomEvent('add-menu-item', {
+                    detail: {
+                        name: pluginTitle,
+                        icon: 'volume_up',
+                        action: () => Lampa.Activity.push({
+                            component: 'settings',
+                            url: '',
+                            id: pluginId
+                        })
+                    }
+                }))
+            ];
+
+            for (const method of menuMethods) {
+                try {
+                    method();
+                    console.log('Пункт меню добавлен');
+                    break;
+                } catch (e) {
+                    console.warn('Способ добавления в меню не сработал:', e);
+                }
+            }
 
         } catch (e) {
-            console.error('Ошибка при создании меню:', e);
+            console.error('Критическая ошибка в createPluginMenu:', e);
         }
     }
 
-    // 4. Инициализация плагина
+    // 4. Инициализация с улучшенной обработкой ошибок
     function initPlugin() {
-        console.log('Инициализация плагина ' + pluginTitle);
-        createPluginMenu();
+        if (!checkLampaAPI()) {
+            console.error('Недостаточно API для работы плагина');
+            return;
+        }
+
+        console.log('Инициализация плагина', pluginTitle);
         
-        if (Lampa.Events) {
+        try {
+            createPluginMenu();
             Lampa.Events.subscribe('video_ready', onVideoReady);
+        } catch (e) {
+            console.error('Ошибка инициализации:', e);
         }
     }
 
-    // 5. Запуск плагина с максимальной совместимостью
-    waitForLampa(() => {
-        // Способ 1: Через новый API
-        if (Lampa.API && Lampa.API.addPlugin) {
+    // 5. Универсальный запуск
+    if (window.Lampa) {
+        if (Lampa.API?.addPlugin) {
             Lampa.API.addPlugin({
                 id: pluginId,
                 name: pluginTitle,
                 callback: initPlugin
             });
-        } 
-        // Способ 2: Через старый API
-        else if (Lampa.Plugin && Lampa.Plugin.register) {
-            Lampa.Plugin.register({
-                name: pluginId,
-                title: pluginTitle,
-                version: '1.0.5',
-                description: 'Улучшенная обработка звука',
-                onLoad: initPlugin
-            });
-        }
-        // Способ 3: Вручную после загрузки
-        else {
+        } else {
             initPlugin();
         }
-    });
-
-    // 6. Дублирующая инициализация для старых версий
-    document.addEventListener('lampa-loaded', initPlugin);
+    } else {
+        document.addEventListener('lampa-loaded', initPlugin);
+        setTimeout(() => {
+            if (!window.Lampa) console.error('Lampa не загрузилась после ожидания');
+        }, 5000);
+    }
 })();
