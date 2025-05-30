@@ -1,3 +1,6 @@
+if (!Lampa.Settings.addCategory) {
+    Lampa.Settings.addCategory = function() {};
+}
 (function() {
     const pluginId = 'syncsound';
     const pluginTitle = 'СинхроЗвук';
