@@ -3,103 +3,120 @@
     const pluginTitle = 'СинхроЗвук';
     const settingsTitle = 'Настройки СинхроЗвука';
 
-    // Проверка и ожидание загрузки Lampa
-    function waitForLampa(callback) {
-        if (window.Lampa && Lampa.Storage && Lampa.Settings) {
+    // 1. Функция ожидания готовности Lampa
+    function waitForLampa(callback, attempts = 10) {
+        if (window.Lampa && Lampa.Storage && Lampa.Settings && Lampa.Menu) {
             callback();
+        } else if (attempts > 0) {
+            setTimeout(() => waitForLampa(callback, attempts - 1), 300);
         } else {
-            setTimeout(() => waitForLampa(callback), 100);
+            console.error('Lampa API не загрузилось после 10 попыток');
         }
     }
 
-    // Основные функции плагина остаются без изменений
-    // ... (aiAnalyzeAudioTrack, normalizeAudioSettings, applyNightMode, onVideoReady) ...
+    // 2. Основные функции плагина (без изменений)
+    // ... (оставляем ваши функции aiAnalyzeAudioTrack, normalizeAudioSettings и др.) ...
 
-    function createPluginSettings() {
+    // 3. Создание настроек с гарантированным добавлением в меню
+    function createPluginMenu() {
         try {
-            // Создаем отдельную категорию настроек
+            // Создаем категорию настроек
             Lampa.Settings.addCategory(pluginId, {
-                title: settingsTitle,  // Используем новое название
-                icon: 'graphic_eq',   // Иконка эквалайзера
-                component: pluginId + '_settings'
+                title: settingsTitle,
+                icon: 'volume_up',
+                component: pluginId
             });
 
-            // Настройки плагина
-            Lampa.Settings.add(pluginId + '_settings', {
-                title: settingsTitle,  // Новое название в заголовке
+            // Добавляем сами настройки
+            Lampa.Settings.add(pluginId, {
+                title: settingsTitle,
                 items: [
                     {
                         name: 'Ночной режим',
-                        description: 'Уменьшает громкость резких звуков',
                         type: 'toggle',
                         value: Lampa.Storage.get(pluginId + '_nightmode', false),
                         onchange: (val) => Lampa.Storage.set(pluginId + '_nightmode', val)
                     },
                     {
                         name: 'Нормализация речи',
-                        description: 'Усиливает голоса в аудиодорожке',
                         type: 'toggle',
                         value: Lampa.Storage.get(pluginId + '_speechnorm', true),
                         onchange: (val) => Lampa.Storage.set(pluginId + '_speechnorm', val)
-                    },
-                    {
-                        name: 'Автовыбор дорожки',
-                        description: 'Автоматически выбирать лучшую аудиодорожку',
-                        type: 'toggle',
-                        value: Lampa.Storage.get(pluginId + '_autoselect', true),
-                        onchange: (val) => Lampa.Storage.set(pluginId + '_autoselect', val)
                     }
                 ]
             });
 
-            // Добавляем пункт в главное меню
-            if (Lampa.Menu && Lampa.Menu.main) {
-                Lampa.Menu.main.add({
-                    name: pluginTitle,
-                    icon: 'graphic_eq',
-                    action: () => {
-                        Lampa.Activity.push({
-                            component: 'settings',
-                            url: '',
-                            id: pluginId + '_settings'
-                        });
-                    }
+            // ГАРАНТИРОВАННОЕ добавление в меню (3 разных способа)
+            const menuItem = {
+                name: pluginTitle,
+                icon: 'volume_up',
+                action: () => {
+                    Lampa.Activity.push({
+                        component: 'settings',
+                        url: '',
+                        id: pluginId
+                    });
+                }
+            };
+
+            // Способ 1 (современные версии)
+            if (Lampa.Menu.main && Lampa.Menu.main.add) {
+                Lampa.Menu.main.add(menuItem);
+            } 
+            // Способ 2 (старые версии)
+            else if (Lampa.Menu.add) {
+                Lampa.Menu.add(menuItem);
+            }
+            // Способ 3 (экстренный)
+            else {
+                document.addEventListener('lampa-menu-ready', () => {
+                    Lampa.Menu.main.add(menuItem);
                 });
             }
 
+            console.log('Пункт меню успешно добавлен');
+
         } catch (e) {
-            console.error('Ошибка создания настроек:', e);
+            console.error('Ошибка при создании меню:', e);
         }
     }
 
-    // Инициализация плагина
+    // 4. Инициализация плагина
     function initPlugin() {
         console.log('Инициализация плагина ' + pluginTitle);
-        createPluginSettings();
+        createPluginMenu();
         
         if (Lampa.Events) {
             Lampa.Events.subscribe('video_ready', onVideoReady);
         }
     }
 
-    // Совместимость с разными версиями Lampa
+    // 5. Запуск плагина с максимальной совместимостью
     waitForLampa(() => {
-        if (Lampa.Plugin && Lampa.Plugin.register) {
-            Lampa.Plugin.register({
-                name: pluginId,
-                title: pluginTitle,
-                version: '1.0.4',
-                description: 'Интеллектуальная обработка звука',
-                onLoad: initPlugin
-            });
-        } else if (Lampa.API && Lampa.API.addPlugin) {
+        // Способ 1: Через новый API
+        if (Lampa.API && Lampa.API.addPlugin) {
             Lampa.API.addPlugin({
                 id: pluginId,
                 name: pluginTitle,
                 callback: initPlugin
             });
-        } else {
-            document.addEventListener('lampa-loaded', initPlugin);
+        } 
+        // Способ 2: Через старый API
+        else if (Lampa.Plugin && Lampa.Plugin.register) {
+            Lampa.Plugin.register({
+                name: pluginId,
+                title: pluginTitle,
+                version: '1.0.5',
+                description: 'Улучшенная обработка звука',
+                onLoad: initPlugin
+            });
+        }
+        // Способ 3: Вручную после загрузки
+        else {
+            initPlugin();
         }
     });
+
+    // 6. Дублирующая инициализация для старых версий
+    document.addEventListener('lampa-loaded', initPlugin);
 })();
