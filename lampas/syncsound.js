@@ -3,25 +3,32 @@
     const pluginTitle = 'СинхроЗвук';
     const settingsTitle = 'Настройки СинхроЗвука';
 
-    // 1. Проверка основных компонентов Lampa
-    if (!window.Lampa || !Lampa.Storage || !Lampa.Settings) {
-        console.error('Недостаточно API для работы плагина');
-        return;
+    // 1. Ожидание полной загрузки Lampa
+    function waitForLampa(callback) {
+        if (window.Lampa && Lampa.Storage && Lampa.Settings) {
+            callback();
+        } else {
+            setTimeout(() => waitForLampa(callback), 100);
+        }
     }
 
-    // 2. Основные функции плагина
+    // 2. Основные функции плагина (без изменений)
     function aiAnalyzeAudioTrack(track) {
-        // ... (ваша реализация) ...
+        // ... ваша реализация ...
     }
 
     function normalizeAudioSettings(audioTracks) {
-        // ... (ваша реализация) ...
+        // ... ваша реализация ...
     }
 
-    // 3. Создание меню (совместимый способ)
+    function onVideoReady(event) {
+        // ... ваша реализация ...
+    }
+
+    // 3. Совместимое создание меню
     function createPluginMenu() {
         try {
-            // Добавление настроек
+            // Альтернатива для старых версий без addCategory
             Lampa.Settings.add(pluginId, {
                 title: settingsTitle,
                 items: [
@@ -40,7 +47,7 @@
                 ]
             });
 
-            // Добавление в главное меню
+            // Универсальное добавление в меню
             if (Lampa.Menu && Lampa.Menu.add) {
                 Lampa.Menu.add({
                     name: pluginTitle,
@@ -53,16 +60,17 @@
                         });
                     }
                 });
-                console.log('Пункт меню успешно добавлен');
+                console.log('Пункт меню добавлен');
             }
+
         } catch (e) {
             console.error('Ошибка создания меню:', e);
         }
     }
 
-    // 4. Инициализация
-    function init() {
-        console.log('Инициализация плагина', pluginTitle);
+    // 4. Инициализация плагина
+    function initPlugin() {
+        console.log('Инициализация плагина ' + pluginTitle);
         createPluginMenu();
         
         if (Lampa.Events) {
@@ -70,10 +78,24 @@
         }
     }
 
-    // 5. Старт плагина
-    if (window.LampaReady) {
-        init();
-    } else {
-        document.addEventListener('lampa-loaded', init);
-    }
+    // 5. Запуск плагина
+    waitForLampa(() => {
+        // Для самых старых версий
+        if (typeof Lampa.Plugin !== 'undefined') {
+            Lampa.Plugin.register({
+                name: pluginId,
+                title: pluginTitle,
+                version: '1.0.6',
+                description: 'Оптимизация аудиодорожек',
+                onLoad: initPlugin
+            });
+        } else {
+            // Прямая инициализация
+            initPlugin();
+        }
+    });
+
+    // 6. Дублирующий вызов для надежности
+    document.addEventListener('DOMContentLoaded', initPlugin);
+    if (document.readyState === 'complete') initPlugin();
 })();
