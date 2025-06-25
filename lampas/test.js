@@ -1,134 +1,80 @@
-(function() {
-    const pluginId = 'syncsound';
-    const pluginTitle = 'СинхроЗвук';
-    
-    // 1. Проверка минимально необходимых компонентов
-    if (!window.Lampa || !Lampa.Storage) {
-        console.error('Недостаточно API для работы плагина');
-        return;
-    }
+(async function () {
+  const plugin = {
+    title: 'ČSFD.cz',
+    version: '1.0.0',
+    description: 'Поиск фильмов и сериалов с ČSFD.cz',
 
-    // 2. Создаем свои настройки в localStorage
-    const defaultSettings = {
-        nightmode: false,
-        speechnorm: true,
-        noisereduce: true
-    };
-
-    // 3. Альтернативное меню через HTML-инъекцию
-    function createCustomMenu() {
-        try {
-            // Создаем кнопку в интерфейсе
-            const menuItem = document.createElement('div');
-            menuItem.className = 'selector__card';
-            menuItem.innerHTML = `
-                <div class="selector__card__side">
-                    <div class="selector__card__icon">
-                        <svg style="width:24px;height:24px" viewBox="0 0 24 24">
-                            <path fill="currentColor" d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-                        </svg>
-                    </div>
-                    <div class="selector__card__title">${pluginTitle}</div>
-                </div>
-            `;
-            
-            menuItem.onclick = function() {
-                showCustomSettings();
-            };
-
-            // Добавляем в интерфейс (адаптируйте селектор под вашу версию Lampa)
-            const menuContainer = document.querySelector('.selector__cards');
-            if (menuContainer) {
-                menuContainer.appendChild(menuItem);
-                console.log('Кастомное меню добавлено');
-            }
-        } catch (e) {
-            console.error('Ошибка создания меню:', e);
+    // Добавляем пункт в меню Lampas
+    menu: () => {
+      return [
+        {
+          title: 'Поиск на ČSFD.cz',
+          search_on: true,
+          url: 'csfd:search'
         }
-    }
+      ];
+    },
 
-    // 4. Показываем настройки в всплывающем окне
-    function showCustomSettings() {
-        const settings = {
-            nightmode: Lampa.Storage.get(pluginId + '_nightmode', defaultSettings.nightmode),
-            speechnorm: Lampa.Storage.get(pluginId + '_speechnorm', defaultSettings.speechnorm),
-            noisereduce: Lampa.Storage.get(pluginId + '_noisereduce', defaultSettings.noisereduce)
-        };
+    // Функция поиска
+    search: async (query) => {
+      try {
+        // 1. Ищем фильмы на ČSFD (через парсинг HTML)
+        const searchUrl = `https://www.csfd.cz/hledat/?q=${encodeURIComponent(query)}`;
+        const response = await fetch(searchUrl);
+        const html = await response.text();
 
-        // Создаем интерфейс настроек
-        const html = `
-            <div class="fullskipper">
-                <div class="fullskipper__body">
-                    <div class="fullskipper__title">${pluginTitle}</div>
-                    
-                    <div class="fullskipper__item">
-                        <div class="fullskipper__item__name">Ночной режим</div>
-                        <div class="fullskipper__item__toggle ${settings.nightmode ? 'active' : ''}" 
-                             data-setting="nightmode">
-                            <div class="fullskipper__item__toggle__thumb"></div>
-                        </div>
-                    </div>
-                    
-                    <div class="fullskipper__item">
-                        <div class="fullskipper__item__name">Нормализация речи</div>
-                        <div class="fullskipper__item__toggle ${settings.speechnorm ? 'active' : ''}" 
-                             data-setting="speechnorm">
-                            <div class="fullskipper__item__toggle__thumb"></div>
-                        </div>
-                    </div>
-                    
-                    <div class="fullskipper__buttons">
-                        <div class="fullskipper__button close">Закрыть</div>
-                    </div>
-                </div>
-            </div>
-        `;
+        // 2. Парсим результаты (используем DOMParser)
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const films = doc.querySelectorAll('.film-title a');
 
-        // Добавляем в DOM
-        const container = document.createElement('div');
-        container.innerHTML = html;
-        document.body.appendChild(container);
+        // 3. Форматируем данные для Lampas
+        const results = [];
+        films.forEach((film) => {
+          const title = film.textContent.trim();
+          const url = film.href;
+          const id = url.match(/film\/(\d+)\//)?.[1];
 
-        // Обработчики событий
-        container.querySelectorAll('.fullskipper__item__toggle').forEach(toggle => {
-            toggle.addEventListener('click', function() {
-                const setting = this.getAttribute('data-setting');
-                const newValue = !settings[setting];
-                
-                this.classList.toggle('active');
-                Lampa.Storage.set(pluginId + '_' + setting, newValue);
-                settings[setting] = newValue;
+          if (id) {
+            results.push({
+              title: title,
+              url: `csfd:film:${id}`, // Уникальный ID для Lampas
+              id: id,
+              type: 'movie' // или 'series'
             });
+          }
         });
 
-        container.querySelector('.close').addEventListener('click', function() {
-            document.body.removeChild(container);
-        });
-    }
+        return results;
 
-    // 5. Основные функции плагина (оставить ваши реализации)
-    function onVideoReady(event) {
-        // ... ваш код обработки аудиодорожек ...
-    }
+      } catch (error) {
+        console.error('ČSFD Plugin Error:', error);
+        return []; // Возвращаем пустой массив при ошибке
+      }
+    },
 
-    // 6. Инициализация
-    function init() {
-        console.log('Инициализация плагина ' + pluginTitle);
-        
-        // Ждем загрузки интерфейса
-        setTimeout(() => {
-            createCustomMenu();
-            
-            if (Lampa.Events) {
-                Lampa.Events.subscribe('video_ready', onVideoReady);
-            }
-        }, 3000);
-    }
+    // Дополнительно: получение деталей фильма (опционально)
+    item: async (id) => {
+      const filmUrl = `https://www.csfd.cz/film/${id}/`;
+      const response = await fetch(filmUrl);
+      const html = await response.text();
 
-    // Запуск
-    if (window.LampaReady) {
-        init();
-    } else {
-        document.addEventListener('DOMContentLoaded', init);
+      // Парсим год, описание, постер и т.д.
+      // ...
+
+      return {
+        title: title,
+        description: description,
+        poster: posterUrl,
+        year: year
+      };
     }
+  };
+
+  // Регистрируем плагин в Lampas
+  if (typeof Lampa !== 'undefined' && Lampa.Plugin) {
+    Lampa.Plugin.register(plugin);
+  } else {
+    console.error('Lampa Plugin API не найден!');
+  }
 })();
