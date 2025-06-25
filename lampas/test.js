@@ -1,69 +1,84 @@
-// plugin.js
-(function() {
+(async function () {
   const plugin = {
-    id: 'csfd_cz',
     title: 'ČSFD.cz',
-    icon: 'https://i.imgur.com/5qY9XxD.png',
-    description: 'База данных чешских фильмов',
-    
-    // Меню в Lampa
-    menu: () => [{
-      title: 'ČSFD Поиск',
-      search_on: true,
-      params: { type: 'csfd' }
-    }],
-    
-    // Поиск фильмов
+    version: '1.0.0',
+    description: 'Фильмы с чешской озвучкой',
+    icon: 'https://i.imgur.com/5qY9XxD.png', // Иконка ČSFD (можно заменить на свою URL)
+
+    menu: () => {
+      return [
+        {
+          title: 'Поиск ČSFD',
+          search_on: true,
+          url: 'csfd:search'
+        }
+      ];
+    },
+
     search: async (query) => {
       try {
-        const html = await fetch(`https://www.csfd.cz/hledat/?q=${encodeURIComponent(query)}`)
-          .then(r => r.text());
-        
+        // 1. Ищем фильмы на ČSFD
+        const response = await fetch(`https://www.csfd.cz/hledat/?q=${encodeURIComponent(query)}`);
+        const html = await response.text();
+
+        // 2. Парсим результаты
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
-        const items = [];
-        
-        doc.querySelectorAll('.film-title').forEach(el => {
-          const link = el.querySelector('a');
-          if (link) {
-            items.push({
-              title: link.textContent.trim(),
-              url: link.href,
-              id: link.href.match(/film\/(\d+)\//)?.[1]
+        const films = doc.querySelectorAll('.film-title a');
+
+        // 3. Форматируем для Lampa
+        const results = [];
+        films.forEach((film) => {
+          const title = film.textContent.trim();
+          const url = film.href;
+          const id = url.match(/film\/(\d+)\//)?.[1];
+
+          if (id) {
+            results.push({
+              title: title,
+              url: `csfd:${id}`,
+              id: id,
+              icon: 'https://i.imgur.com/5qY9XxD.png', // Иконка для каждого результата
+              type: 'movie'
             });
           }
         });
-        
-        return items.map(item => ({
-          title: item.title,
-          url: `csfd:${item.id}`,
-          icon: 'https://i.imgur.com/5qY9XxD.png'
-        }));
-        
-      } catch (e) {
-        console.error('ČSFD Error:', e);
+
+        return results;
+
+      } catch (error) {
+        console.error('ČSFD Error:', error);
         return [];
       }
     },
-    
-    // Загрузка деталей
+
+    // Детали фильма (опционально)
     item: async (id) => {
-      const html = await fetch(`https://www.csfd.cz/film/${id}/`)
-        .then(r => r.text());
-      
-      // Парсинг описания, года и постера
-      const doc = new DOMParser().parseFromString(html, 'text/html');
-      return {
-        title: doc.querySelector('.film-title')?.textContent.trim(),
-        description: doc.querySelector('.film-description')?.textContent.trim(),
-        year: doc.querySelector('.film-year')?.textContent.trim(),
-        poster: doc.querySelector('.film-poster img')?.src
-      };
+      try {
+        const filmUrl = `https://www.csfd.cz/film/${id}/`;
+        const response = await fetch(filmUrl);
+        const html = await response.text();
+
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+
+        return {
+          title: doc.querySelector('.film-title')?.textContent.trim() || 'Нет названия',
+          description: doc.querySelector('.film-info')?.textContent.trim() || '',
+          year: doc.querySelector('.film-year')?.textContent.trim() || '',
+          poster: doc.querySelector('.film-poster img')?.src || '',
+          icon: 'https://i.imgur.com/5qY9XxD.png' // Иконка в деталях
+        };
+
+      } catch (error) {
+        console.error('ČSFD Details Error:', error);
+        return null;
+      }
     }
   };
 
-  // Регистрация
-  if (typeof Lampa !== 'undefined') {
+  // Регистрация плагина
+  if (typeof Lampa !== 'undefined' && Lampa.Plugin) {
     Lampa.Plugin.register(plugin);
   }
 })();
