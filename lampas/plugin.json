@@ -1,0 +1,9 @@
+
+{
+  "name": "ČSFD Streamer",
+  "version": "1.0.0",
+  "description": "Поиск фильмов на ČSFD.cz с видео от HDVB/FanCDN",
+  "plugin": "csfd.js",
+  "type": "video",
+  "id": "csfd-streamer"
+}
