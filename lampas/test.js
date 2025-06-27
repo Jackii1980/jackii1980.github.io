@@ -1,19 +1,10 @@
-// csfd-plugin/plugin.json
-{
-  "name": "ČSFD Info",
-  "version": "1.0.0",
-  "description": "Интеграция ČSFD.cz с LAMPA (только метаданные)",
-  "plugin": "plugin.js",
-  "type": "video",
-  "id": "csfd-info"
-}
 
-// csfd-plugin/plugin.js
 (async function () {
   const plugin = {
     title: 'ČSFD.cz',
     version: '1.0.0',
-    description: 'Поиск и метаданные с ČSFD.cz',
+    description: 'Фильмы с чешской озвучкой',
+    icon: 'https://www.csfd.cz/img/logo.png',
 
     menu: () => {
       return [
@@ -21,44 +12,66 @@
           title: 'Поиск ČSFD',
           search_on: true,
           url: 'csfd:search'
+        },
+        {
+          title: 'Топ ČSFD',
+          url: 'csfd:top'
         }
       ];
     },
 
     search: async (query) => {
-      const response = await fetch(`https://api.czdb.cz/api/search?q=${encodeURIComponent(query)}`);
-      const json = await response.json();
-      const results = json.items || [];
-      return results.map(item => ({
-        title: item.name,
-        original_title: item.original_title,
-        year: item.year,
-        description: item.plot,
-        icon: item.poster_url,
-        url: `csfd:movie:${item.id}`
-      }));
+      try {
+        const response = await fetch(`https://www.csfd.cz/hledat/?q=${encodeURIComponent(query)}`);
+        const html = await response.text();
+
+        const results = [];
+        const regex = /<a href="\/film\/(\d+)\/[^"]+"[^>]*>(.*?)<\/a>/g;
+        let match;
+
+        while ((match = regex.exec(html)) !== null) {
+          results.push({
+            title: match[2].trim(),
+            url: `csfd:item:${match[1]}`,
+            id: match[1],
+            icon: 'https://www.csfd.cz/img/logo.png'
+          });
+        }
+
+        return results;
+      } catch (e) {
+        console.error('ČSFD Search Error:', e);
+        return [];
+      }
     },
 
     item: async (url) => {
       const id = url.split(':')[2];
-      const response = await fetch(`https://api.czdb.cz/api/detail?id=${id}`);
-      const data = await response.json();
-      return {
-        title: data.name,
-        original_title: data.original_title,
-        description: data.plot,
-        rating: data.rating,
-        icon: data.poster_url,
-        genres: data.genres,
-        country: data.country,
-        year: data.year,
-        quality: 'HD',
-        links: []
-      };
+      try {
+        const response = await fetch(`https://www.csfd.cz/film/${id}/`);
+        const html = await response.text();
+
+        const title = (html.match(/<h1[^>]*>(.*?)<\/h1>/) || [])[1] || 'Без названия';
+        const description = (html.match(/<p class="plot[^"]*">([^<]+)<\/p>/) || [])[1] || 'Без описания';
+        const poster = (html.match(/<img src="([^"]+)"[^>]*class="film-poster"/) || [])[1] || '';
+
+        return {
+          title: title.trim(),
+          description: description.trim(),
+          icon: 'https://www.csfd.cz/img/logo.png',
+          poster: poster,
+          year: '',
+          quality: 'HD',
+          links: []
+        };
+      } catch (e) {
+        console.error('ČSFD Item Error:', e);
+        return null;
+      }
     }
   };
 
-  if (window.registerPlugin) {
-    window.registerPlugin(plugin);
+  if (typeof Lampa !== 'undefined' && Lampa.Plugin) {
+    Lampa.Plugin.register(plugin);
   }
 })();
