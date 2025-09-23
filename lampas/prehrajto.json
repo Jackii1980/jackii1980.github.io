@@ -1,0 +1,9 @@
+{
+    "name": "Prehrajto.cz",
+    "id": "prehrajto_cz",
+    "version": "1.0.0",
+    "description": "Плагин для просмотра фильмов и сериалов с prehrajto.cz",
+    "update": "https://jackii1980.github.io/lampas/prehrajto.js",
+    "page": "https://jackii1980.github.io/lampas",
+    "signature": "8a9b7c6d5e4f3g2h1i0j-k-l-m-n-o-p-q-r-s-t-u-v-w-x-y-z"
+}
