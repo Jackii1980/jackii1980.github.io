@@ -1,4 +1,3 @@
-// prehrajto.js
 let plugin = new Plugin({
     name: 'Prehrajto',
     id: 'prehrajto',
