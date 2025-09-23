@@ -1,243 +1,165 @@
-// @signature basic-test-signature-v1
-// @version 1.0.0
-// @name Prehrajto
-// @id prehrajto.cz
+// prehrajto.js
 
-(function() {
-    'use strict';
-    
-    if (typeof Plugin === 'undefined') {
-        console.error('Lampa Plugin API not found');
-        return;
+// Плагин должен быть простым объектом, который экспортируется
+let Prehrajto = {
+    name: 'Prehrajto',
+    id: 'prehrajto',
+    version: '1.0.0',
+    search: {
+        search: search,
+        filters: filters
+    },
+    source: {
+        movie: source,
+        tv: source
     }
+};
 
-    let plugin = new Plugin({
-        name: 'Prehrajto.cz',
-        id: 'prehrajto',
-        version: '1.0.0',
-        description: 'Watch movies and series from prehrajto.cz',
-        site: 'https://prehrajto.cz/',
-        search: {
-            search: search,
-            filters: filters
-        },
-        source: {
-            movie: source,
-            tv: source
-        }
-    });
-
-    function filters() {
-        return [
-            {
-                name: 'sort',
-                component: 'selector',
-                config: {
-                    label: 'Сортировка',
-                    value: 'newest',
-                    options: [
-                        {value: 'newest', label: 'Сначала новые'},
-                        {value: 'oldest', label: 'Сначала старые'},
-                        {value: 'popular', label: 'По популярности'}
-                    ]
-                }
+// Функция filters остаётся без изменений, так как она возвращает простой массив
+function filters() {
+    return [
+        {
+            name: 'genre',
+            component: 'selector',
+            config: {
+                label: 'Жанр',
+                value: '',
+                options: [
+                    {value: '', label: 'Все жанры'},
+                    {value: 'akcni', label: 'Боевик'},
+                    {value: 'komedie', label: 'Комедия'},
+                    {value: 'drama', label: 'Драма'},
+                    {value: 'fantasy', label: 'Фэнтези'},
+                    {value: 'horor', label: 'Ужасы'},
+                    {value: 'scifi', label: 'Научная фантастика'},
+                    {value: 'thriller', label: 'Триллер'}
+                ]
             }
-        ];
-    }
+        },
+        {
+            name: 'year',
+            component: 'text',
+            config: {
+                label: 'Год',
+                placeholder: 'Например: 2023'
+            }
+        }
+    ];
+}
 
-    async function search(keyword, page, filters) {
-        try {
-            console.log('Searching for:', keyword, 'page:', page);
-            
-            // Формируем URL для поиска
-            let searchUrl = `https://prehrajto.cz/hledat/${encodeURIComponent(keyword)}`;
-            if (page > 1) searchUrl += `?page=${page}`;
-            
-            const response = await fetch(searchUrl);
-            const html = await response.text();
-            
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            
-            const results = [];
-            
-            // Парсим результаты - адаптируйте селекторы под реальную структуру сайта
-            const items = doc.querySelectorAll('.movie-item, .film-item, .item, [class*="movie"], [class*="film"]');
-            
-            items.forEach(item => {
-                try {
-                    const titleElem = item.querySelector('h2, h3, .title, .name, [class*="title"]');
-                    const linkElem = item.querySelector('a');
-                    const imgElem = item.querySelector('img');
-                    
-                    if (titleElem && linkElem) {
-                        const title = titleElem.textContent.trim();
-                        let href = linkElem.getAttribute('href');
-                        const poster = imgElem ? imgElem.getAttribute('src') : '';
-                        
-                        if (href && !href.startsWith('http')) {
-                            href = 'https://prehrajto.cz' + (href.startsWith('/') ? href : '/' + href);
-                        }
-                        
-                        // Определяем тип контента
-                        const isSeries = title.toLowerCase().includes('seriál') || 
-                                       href.toLowerCase().includes('serial') ||
-                                       href.toLowerCase().includes('series');
-                        
-                        results.push({
-                            title: title,
-                            poster: poster,
-                            href: href,
-                            type: isSeries ? 'tv' : 'movie'
-                        });
-                    }
-                } catch (e) {
-                    console.error('Error parsing item:', e);
-                }
-            });
-            
-            // Если не нашли стандартным способом, ищем по ссылкам
-            if (results.length === 0) {
-                const links = doc.querySelectorAll('a[href*="/film/"], a[href*="/serial/"], a[href*="/movie/"]');
-                links.forEach(link => {
-                    const href = link.getAttribute('href');
-                    const title = link.textContent.trim();
-                    
-                    if (title && title.length > 2) {
-                        const isSeries = href.includes('/serial/') || href.includes('/series/');
-                        
-                        results.push({
-                            title: title,
-                            poster: '',
-                            href: href.startsWith('http') ? href : 'https://prehrajto.cz' + href,
-                            type: isSeries ? 'tv' : 'movie'
-                        });
-                    }
+// Переписываем search() без async/await, используя .then()
+function search(keyword, page, filters) {
+    let url = 'https://prehrajto.cz/vyhledavani?query=' + encodeURIComponent(keyword);
+
+    if (filters.genre) url += '&genre=' + filters.genre;
+    if (filters.year) url += '&year=' + filters.year;
+
+    if (page > 1) url += '&page=' + page;
+
+    // Используем внутреннюю функцию Lampa для сетевых запросов.
+    // Lampa имеет собственный объект `Lampa.Utils.request`.
+    return Lampa.Utils.request(url, {
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://prehrajto.cz/',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        }
+    })
+    .then(html => {
+        // Используем внутренний парсер Lampa
+        let doc = Lampa.Utils.html_parse(html);
+
+        let results = [];
+        let items = doc.querySelectorAll('.movie-item, .video-item');
+
+        items.forEach(item => {
+            let titleElem = item.querySelector('.title, h3');
+            let posterElem = item.querySelector('.poster, img');
+            let linkElem = item.querySelector('a');
+
+            if (titleElem && linkElem) {
+                let title = titleElem.textContent.trim();
+                let poster = posterElem ? posterElem.getAttribute('src') : '';
+                let href = linkElem.getAttribute('href');
+
+                let isSeries = title.toLowerCase().includes('seriál') || href.toLowerCase().includes('serial');
+
+                results.push({
+                    title: title,
+                    poster: poster,
+                    href: href,
+                    type: isSeries ? 'tv' : 'movie'
                 });
             }
-            
-            console.log('Found', results.length, 'results');
-            
-            return {
-                results: results,
-                hasMore: doc.querySelector('.pagination, .next, [class*="page"]') !== null
-            };
-            
-        } catch (error) {
-            console.error('Search error:', error);
-            return {
-                results: [],
-                hasMore: false
-            };
-        }
-    }
-
-    async function source(match) {
-        try {
-            console.log('Getting source for:', match.title);
-            
-            let url = match.href;
-            if (!url.startsWith('http')) {
-                url = 'https://prehrajto.cz' + (url.startsWith('/') ? url : '/' + url);
-            }
-            
-            const response = await fetch(url);
-            const html = await response.text();
-            
-            const sources = [];
-            
-            // Ищем iframe с видео
-            const iframeRegex = /<iframe[^>]*src="([^"]+)"[^>]*>/gi;
-            let iframeMatch;
-            while ((iframeMatch = iframeRegex.exec(html)) !== null) {
-                const iframeUrl = iframeMatch[1];
-                if (iframeUrl && !iframeUrl.includes('ad')) {
-                    sources.push({
-                        url: iframeUrl,
-                        quality: '720p',
-                        type: 'iframe',
-                        name: 'Video Player'
-                    });
-                }
-            }
-            
-            // Ищем прямые ссылки на видео
-            const videoRegex = /(https?:\/\/[^\s"']*\.(mp4|m3u8|mkv|avi)[^\s"']*)/gi;
-            let videoMatch;
-            while ((videoMatch = videoRegex.exec(html)) !== null) {
-                const videoUrl = videoMatch[1];
-                if (videoUrl && !videoUrl.includes('ad')) {
-                    sources.push({
-                        url: videoUrl,
-                        quality: videoUrl.includes('1080') ? '1080p' : 
-                                videoUrl.includes('720') ? '720p' : '480p',
-                        type: videoUrl.includes('.m3u8') ? 'hls' : 'mp4'
-                    });
-                }
-            }
-            
-            // Ищем в JSON данных
-            const jsonRegex = /(?:file|url|source)\s*[:=]\s*["']([^"']+\.(mp4|m3u8))["']/gi;
-            let jsonMatch;
-            while ((jsonMatch = jsonRegex.exec(html)) !== null) {
-                const videoUrl = jsonMatch[1];
-                if (videoUrl.startsWith('http')) {
-                    sources.push({
-                        url: videoUrl,
-                        quality: '720p',
-                        type: videoUrl.includes('.m3u8') ? 'hls' : 'mp4'
-                    });
-                }
-            }
-            
-            console.log('Found', sources.length, 'sources');
-            
-            return {
-                sources: sources,
-                name: match.title,
-                poster: match.poster || '',
-                quality: sources.length > 0 ? 'Доступно' : 'Нет источников'
-            };
-            
-        } catch (error) {
-            console.error('Source error:', error);
-            return {
-                sources: [],
-                name: match.title,
-                poster: match.poster || ''
-            };
-        }
-    }
-
-    // Улучшенная функция fetch
-    async function fetch(url) {
-        return new Promise((resolve, reject) => {
-            network.http(url, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Language': 'cs,en;q=0.9,ru;q=0.8',
-                    'Referer': 'https://prehrajto.cz/'
-                },
-                timeout: 10000
-            })
-            .then(response => {
-                if (response.status === 200) {
-                    resolve(response);
-                } else {
-                    reject(new Error(`HTTP ${response.status}`));
-                }
-            })
-            .catch(error => reject(error));
         });
-    }
 
-    // Регистрируем плагин
-    try {
-        plugin.register();
-        console.log('✅ Prehrajto plugin registered successfully');
-    } catch (error) {
-        console.error('❌ Failed to register plugin:', error);
-    }
+        return {
+            results: results,
+            hasMore: doc.querySelector('.pagination .next') !== null
+        };
+    });
+}
 
-})();
+// Переписываем source() без async/await, используя .then()
+function source(match) {
+    let url = 'https://prehrajto.cz' + match.href;
+    
+    return Lampa.Utils.request(url, {
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://prehrajto.cz/',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        }
+    })
+    .then(html => {
+        let doc = Lampa.Utils.html_parse(html);
+        let sources = [];
+        let videoPlayers = doc.querySelectorAll('video, iframe, [data-video]');
+
+        videoPlayers.forEach(player => {
+            let src = player.getAttribute('src') || 
+                      player.getAttribute('data-src') || 
+                      player.getAttribute('data-video');
+
+            if (src && !src.includes('ads')) {
+                let quality = '720p';
+                let qualityMatch = src.match(/(\d+p)/);
+                if (qualityMatch) quality = qualityMatch[1];
+
+                sources.push({
+                    url: src,
+                    quality: quality,
+                    type: src.includes('m3u8') ? 'hls' : 'mp4'
+                });
+            }
+        });
+
+        if (sources.length === 0) {
+            let scriptTags = doc.querySelectorAll('script');
+            for (let script of scriptTags) {
+                let scriptContent = script.textContent;
+                let videoUrlMatches = scriptContent.match(/(https?:\/\/[^\s"']*\.(mp4|m3u8|webm)[^\s"']*)/gi);
+                if (videoUrlMatches) {
+                    videoUrlMatches.forEach(url => {
+                        if (!url.includes('ads')) {
+                            sources.push({
+                                url: url,
+                                quality: '720p',
+                                type: url.includes('m3u8') ? 'hls' : 'mp4'
+                            });
+                        }
+                    });
+                }
+            }
+        }
+        
+        return {
+            sources: sources,
+            name: match.title,
+            poster: match.poster
+        };
+    });
+}
+
+// Вместо plugin.register() нужно экспортировать сам объект плагина
+export default Prehrajto;
